@@ -295,6 +295,22 @@ public class JavaBeanDeserializer implements ObjectDeserializer {
             throw new JSONException("error");
         }
 
+        String typeName = null;
+        if ((typeName = lexer.scanTypeName(parser.symbolTable)) != null) {
+            ObjectDeserializer deserializer = getSeeAlso(parser.getConfig(), this.beanInfo, typeName);
+            Class<?> userType = null;
+
+            if (deserializer == null) {
+                Class<?> expectClass = TypeUtils.getClass(type);
+                userType = parser.getConfig().checkAutoType(typeName, expectClass, lexer.getFeatures());
+                deserializer = parser.getConfig().getDeserializer(userType);
+            }
+
+            if (deserializer instanceof JavaBeanDeserializer) {
+                return ((JavaBeanDeserializer) deserializer).deserialzeArrayMapping(parser, type, fieldName, object);
+            }
+        }
+
         object = createInstance(parser, type);
 
         for (int i = 0, size = sortedFieldDeserializers.length; i < size; ++i) {
@@ -847,7 +863,8 @@ public class JavaBeanDeserializer implements ObjectDeserializer {
                         }
                     }
                 } else {
-                    boolean match = parseField(parser, key, object, type, fieldValues, setFlags);
+                    boolean match = parseField(parser, key, object, type,
+                            fieldValues == null ? new HashMap<String, Object>(this.fieldDeserializers.length) : fieldValues, setFlags);
 
                     if (!match) {
                         if (lexer.token() == JSONToken.RBRACE) {
@@ -1335,7 +1352,8 @@ public class JavaBeanDeserializer implements ObjectDeserializer {
                 Type paramType = fieldInfo.fieldType;
 
                 if (field != null) {
-                    if (paramType == boolean.class) {
+                    Class fieldType = field.getType();
+                    if (fieldType == boolean.class) {
                         if (value == Boolean.FALSE) {
                             field.setBoolean(object, false);
                             continue;
@@ -1345,17 +1363,17 @@ public class JavaBeanDeserializer implements ObjectDeserializer {
                             field.setBoolean(object, true);
                             continue;
                         }
-                    } else if (paramType == int.class) {
+                    } else if (fieldType == int.class) {
                         if (value instanceof Number) {
                             field.setInt(object, ((Number) value).intValue());
                             continue;
                         }
-                    } else if (paramType == long.class) {
+                    } else if (fieldType == long.class) {
                         if (value instanceof Number) {
                             field.setLong(object, ((Number) value).longValue());
                             continue;
                         }
-                    } else if (paramType == float.class) {
+                    } else if (fieldType == float.class) {
                         if (value instanceof Number) {
                             field.setFloat(object, ((Number) value).floatValue());
                             continue;
@@ -1371,7 +1389,7 @@ public class JavaBeanDeserializer implements ObjectDeserializer {
                             field.setFloat(object, floatValue);
                             continue;
                         }
-                    } else if (paramType == double.class) {
+                    } else if (fieldType == double.class) {
                         if (value instanceof Number) {
                             field.setDouble(object, ((Number) value).doubleValue());
                             continue;
@@ -1539,7 +1557,7 @@ public class JavaBeanDeserializer implements ObjectDeserializer {
         return value;
     }
     
-    protected JavaBeanDeserializer getSeeAlso(ParserConfig config, JavaBeanInfo beanInfo, String typeName) {
+    protected static JavaBeanDeserializer getSeeAlso(ParserConfig config, JavaBeanInfo beanInfo, String typeName) {
         if (beanInfo.jsonType == null) {
             return null;
         }
